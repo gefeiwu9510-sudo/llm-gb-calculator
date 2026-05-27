@@ -47,5 +47,12 @@
     "hidden_size": 3584,
     "layers": 28,
     "seq_len": 32768
+  },
+  "qwen/qwen3.5 4b": {
+    "name": "Qwen/Qwen3.5-4B",
+    "parameters_billion": 3.1522816,
+    "hidden_size": 2560,
+    "layers": 32,
+    "seq_len": 262144
   }
 }

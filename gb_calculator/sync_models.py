@@ -13,6 +13,29 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from urllib.error import HTTPError, URLError
+
+
+_CONFIG_KEY_ALIASES: dict[str, tuple[str, ...]] = {
+    "hidden_size": ("hidden_size", "n_embd", "d_model", "dim", "model_dim"),
+    "layers": (
+        "num_hidden_layers",
+        "n_layer",
+        "num_layers",
+        "num_decoder_layers",
+        "n_layers",
+        "layer_count",
+    ),
+    "seq_len": (
+        "max_position_embeddings",
+        "seq_length",
+        "max_seq_len",
+        "context_length",
+        "max_sequence_length",
+        "max_context_length",
+    ),
+}
+
 try:
     from huggingface_hub import hf_hub_download
 except ImportError as exc:  # pragma: no cover - dependency not always installed
@@ -24,50 +47,89 @@ else:
 from .estimator import load_model_catalog, register_model_spec
 
 
+def _first_config_value(config: dict[str, Any], keys: tuple[str, ...]) -> Any:
+    for key in keys:
+        value = config.get(key)
+        if value is not None:
+            return value
+    return None
+
+
+def _as_mapping(value: Any) -> dict[str, Any] | None:
+    return value if isinstance(value, dict) else None
+
+
+def _config_sources(config: dict[str, Any]) -> list[dict[str, Any]]:
+    sources = [config]
+    for key in ("text_config", "model_config", "vision_config", "language_config", "decoder_config"):
+        nested = _as_mapping(config.get(key))
+        if nested:
+            sources.append(nested)
+    return sources
+
+
 def _extract_config_fields(config: dict[str, Any]) -> tuple[int, int, int]:
-    hidden_size = int(
-        config.get("hidden_size")
-        or config.get("n_embd")
-        or config.get("d_model")
-        or config.get("dim")
-    )
-    layers = int(
-        config.get("num_hidden_layers")
-        or config.get("n_layer")
-        or config.get("num_layers")
-        or config.get("num_decoder_layers")
-    )
-    seq_len = int(
-        config.get("max_position_embeddings")
-        or config.get("seq_length")
-        or config.get("max_seq_len")
-        or config.get("context_length")
-        or 2048
-    )
-    return hidden_size, layers, seq_len
+    sources = _config_sources(config)
+
+    hidden_size = None
+    layers = None
+    seq_len = None
+
+    for source in sources:
+        if hidden_size is None:
+            hidden_size = _first_config_value(source, _CONFIG_KEY_ALIASES["hidden_size"])
+        if layers is None:
+            layers = _first_config_value(source, _CONFIG_KEY_ALIASES["layers"])
+        if seq_len is None:
+            seq_len = _first_config_value(source, _CONFIG_KEY_ALIASES["seq_len"])
+
+    if hidden_size is None or layers is None:
+        model_type = str(config.get("model_type", "")).lower()
+        architectures = [str(item).lower() for item in config.get("architectures", []) if item]
+        text_config = _as_mapping(config.get("text_config")) or {}
+        if hidden_size is None and (model_type.startswith("qwen") or any("qwen" in item for item in architectures)):
+            hidden_size = _first_config_value(text_config, _CONFIG_KEY_ALIASES["hidden_size"])
+        if layers is None and (model_type.startswith("qwen") or any("qwen" in item for item in architectures)):
+            layers = _first_config_value(text_config, _CONFIG_KEY_ALIASES["layers"])
+
+    if hidden_size is None:
+        raise ValueError("Could not determine hidden size from model config.")
+    if layers is None:
+        raise ValueError("Could not determine layer count from model config.")
+
+    return int(hidden_size), int(layers), int(seq_len or 2048)
 
 
 def _extract_param_count(config: dict[str, Any]) -> float:
-    for key in (
-        "num_parameters",
-        "n_parameters",
-        "parameters",
-        "parameter_count",
-    ):
-        value = config.get(key)
-        if value is not None:
-            if isinstance(value, str):
-                return float(value.replace("_", "")) / 1e9
-            return float(value) / 1e9
+    sources = _config_sources(config)
+    for source in sources:
+        for key in (
+            "num_parameters",
+            "n_parameters",
+            "parameters",
+            "parameter_count",
+        ):
+            value = source.get(key)
+            if value is not None:
+                if isinstance(value, str):
+                    return float(value.replace("_", "")) / 1e9
+                return float(value) / 1e9
 
-    hidden_size = config.get("hidden_size") or config.get("n_embd") or config.get("d_model") or config.get("dim")
-    layers = config.get("num_hidden_layers") or config.get("n_layer") or config.get("num_layers") or config.get("num_decoder_layers")
-    vocab_size = config.get("vocab_size") or config.get("n_vocab") or 0
+    hidden_size = None
+    layers = None
+    vocab_size = None
+    for source in sources:
+        if hidden_size is None:
+            hidden_size = _first_config_value(source, _CONFIG_KEY_ALIASES["hidden_size"])
+        if layers is None:
+            layers = _first_config_value(source, _CONFIG_KEY_ALIASES["layers"])
+        if vocab_size is None:
+            vocab_size = source.get("vocab_size") or source.get("n_vocab")
 
     if hidden_size and layers:
         hidden_size = float(hidden_size)
         layers = float(layers)
-        vocab_size = float(vocab_size)
+        vocab_size = float(vocab_size or 0)
         # Rough decoder-only transformer estimate: embeddings + attention/MLP stack.
         estimated_params = (12.0 * layers * hidden_size * hidden_size) + (vocab_size * hidden_size)
         return estimated_params / 1e9
@@ -81,9 +143,19 @@ def sync_model(model_id: str, parameters_billion: float | None = None) -> dict[s
             "huggingface_hub is required for syncing models. Install with: pip install .[hf]"
         ) from HUGGINGFACE_IMPORT_ERROR
 
-    config_path = hf_hub_download(repo_id=model_id, filename="config.json")
-    with open(config_path, "r", encoding="utf-8") as f:
-        config = json.load(f)
+    try:
+        config_path = hf_hub_download(repo_id=model_id, filename="config.json")
+    except (HTTPError, URLError, TimeoutError, OSError) as exc:
+        raise ConnectionError(f"Failed to download config for '{model_id}': {exc}") from exc
+
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = json.load(f)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"Downloaded config for '{model_id}' is invalid or unreadable: {exc}") from exc
+
+    if not isinstance(config, dict):
+        raise ValueError(f"Config for '{model_id}' must be a JSON object.")
 
     hidden_size, layers, seq_len = _extract_config_fields(config)
     params_billion = parameters_billion if parameters_billion is not None else _extract_param_count(config)

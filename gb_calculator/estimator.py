@@ -136,8 +136,13 @@ def save_model_catalog(catalog: dict[str, dict[str, Any]]) -> None:
 
 
 def _model_from_record(record: dict[str, Any]) -> ModelSpec:
+    required_fields = ("name", "parameters_billion", "hidden_size", "layers", "seq_len")
+    missing = [field for field in required_fields if field not in record]
+    if missing:
+        raise ValueError(f"Cached model record is missing fields: {', '.join(missing)}")
+
     return ModelSpec(
-        name=record["name"],
+        name=str(record["name"]),
         parameters_billion=float(record["parameters_billion"]),
         hidden_size=int(record["hidden_size"]),
         layers=int(record["layers"]),
@@ -149,7 +154,10 @@ def enrich_model_spec(model_name: str) -> ModelSpec:
     normalized = _normalize_key(model_name)
     cache = load_model_catalog()
     if normalized in cache:
-        return _model_from_record(cache[normalized])
+        try:
+            return _model_from_record(cache[normalized])
+        except Exception as exc:
+            raise ValueError(f"Cached model record for '{model_name}' is invalid.") from exc
 
     if normalized in MODEL_LIBRARY:
         return MODEL_LIBRARY[normalized]
@@ -159,6 +167,10 @@ def enrich_model_spec(model_name: str) -> ModelSpec:
 
         synced = sync_model(model_name)
         return _model_from_record(synced)
+    except (ConnectionError, ImportError, ValueError) as exc:
+        raise KeyError(
+            f"Unable to load model '{model_name}'. Check network access, install huggingface_hub, or sync the model first."
+        ) from exc
     except Exception as exc:
         raise KeyError(
             f"Unknown model '{model_name}'. Add it to data/model_cache.json or sync from Hugging Face config first."
