@@ -1,0 +1,7 @@
+[
+  {"model": "meta-llama/Llama-3.1-8B-Instruct", "method": "lora", "batch_size": 1, "seq_len": 4096, "steps": 10000},
+  {"model": "mistralai/Mistral-7B-Instruct-v0.3", "method": "qlora", "batch_size": 1, "seq_len": 4096, "steps": 12000},
+  {"model": "Qwen/Qwen2.5-7B-Instruct", "method": "prefix_tuning", "batch_size": 2, "seq_len": 4096, "steps": 8000},
+  {"model": "google/gemma-2-9b-it", "method": "prompt_tuning", "batch_size": 4, "seq_len": 2048, "steps": 5000},
+  {"model": "deepseek-ai/deepseek-llm-7b-chat", "method": "inference", "batch_size": 1, "seq_len": 4096, "steps": 1000}
+]

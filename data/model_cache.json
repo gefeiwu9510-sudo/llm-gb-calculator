@@ -1,0 +1,51 @@
+{
+  "meta-llama/llama-3.1-8b-instruct": {
+    "name": "meta-llama/Llama-3.1-8B-Instruct",
+    "parameters_billion": 8.0,
+    "hidden_size": 4096,
+    "layers": 32,
+    "seq_len": 4096
+  },
+  "qwen/qwen2.5-7b-instruct": {
+    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "parameters_billion": 7.0,
+    "hidden_size": 3584,
+    "layers": 28,
+    "seq_len": 32768
+  },
+  "mistralai/mistral-7b-instruct-v0.3": {
+    "name": "mistralai/Mistral-7B-Instruct-v0.3",
+    "parameters_billion": 7.0,
+    "hidden_size": 4096,
+    "layers": 32,
+    "seq_len": 8192
+  },
+  "google/gemma-2-9b-it": {
+    "name": "google/gemma-2-9b-it",
+    "parameters_billion": 9.0,
+    "hidden_size": 3584,
+    "layers": 42,
+    "seq_len": 8192
+  },
+  "deepseek-ai/deepseek-llm-7b-chat": {
+    "name": "deepseek-ai/deepseek-llm-7b-chat",
+    "parameters_billion": 7.0,
+    "hidden_size": 4096,
+    "layers": 30,
+    "seq_len": 4096
+  },
+  "mistralai/mistral 7b instruct v0.3": {
+    "name": "mistralai/Mistral-7B-Instruct-v0.3",
+    "parameters_billion": 6.576668672,
+    "hidden_size": 4096,
+    "layers": 32,
+    "seq_len": 32768
+  },
+  "qwen/qwen2.5 7b instruct": {
+    "name": "Qwen/Qwen2.5-7B-Instruct",
+    "parameters_billion": 4.860936192,
+    "hidden_size": 3584,
+    "layers": 28,
+    "seq_len": 32768
+  }
+}
