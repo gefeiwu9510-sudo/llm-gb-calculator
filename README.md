@@ -264,7 +264,7 @@ gated repo 指的是受访问控制的 Hugging Face 仓库。模型页面虽然�
 如果需要本地访问，还可以在命令行登录：
 
 ```bash
-huggingface-cli login
+hf auth login
 ```
 
 然后粘贴你的 Hugging Face token。生成 token 的位置一般在 Hugging Face 网站的：
